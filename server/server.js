@@ -1,11 +1,19 @@
-const express = require('express'); // 1. Import Express
+const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
-const app = express(); // 2. Initialize the App
+// Route Imports
+const authRoutes = require('./src/routes/auth.routes');
+const departmentRoutes = require('./src/routes/department.routes');
+const projectRoutes = require('./src/routes/project.routes');
+const uploadRoutes = require('./src/routes/upload.routes');
+const userRoutes = require('./src/routes/user.routes'); // 👈 Import Users
 
-// 3. Database Connection
+// 1. Initialize the App
+const app = express();
+
+// 2. Database Connection
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
@@ -17,17 +25,18 @@ const connectDB = async () => {
 };
 connectDB();
 
-// 4. Middleware
+// 3. Middleware
 app.use(cors());
-app.use(express.json()); // Essential for Postman to send JSON
+app.use(express.json()); // Essential for sending JSON
 
-// 5. Routes (We will add these in Task A/B)
-app.use('/api/auth', require('./src/routes/auth.routes'));
-app.use('/api/departments', require('./src/routes/department.routes'));
-app.use('/api/projects', require('./src/routes/project.routes'));
-app.use('/api/uploads', require('./src/routes/upload.routes'));
+// 4. Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/users', userRoutes); // 👈 Add Users Route Here
 
-// 6. Server Start
+// 5. Server Start
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

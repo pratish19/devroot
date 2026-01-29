@@ -1,37 +1,56 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Layout from './components/Layout';
+import Login from './pages/auth/Login';
+import ManagerHome from './pages/manager/ManagerHome';
+import UserHome from './pages/user/UserHome';
+import ProjectList from './pages/manager/ProjectList';
+import ProjectDetails from './pages/manager/ProjectDetails';
+import FolderView from './pages/manager/FolderView';
+import DepartmentList from './pages/manager/DepartmentList';
+import DepartmentDetails from './pages/manager/DepartmentDetails';
+import UserList from './pages/manager/UserList';
+import UserDetails from './pages/manager/UserDetails'; // 👈 ⭐ IMPORT THIS!
+
+// Placeholders
+const ProjectsPlaceholder = () => <h1 className="text-2xl text-white">📂 Projects Page</h1>;
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1 className="text-3xl font-bold underline text-blue-600">
-  Tailwind is Working!
-</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/auth/login" />} />
+        <Route path="/auth/login" element={<Login />} />
+
+        {/* 🔐 PROTECTED LAYOUT WRAPPER */}
+        <Route element={<Layout />}>
+          
+          {/* Manager Routes */}
+          <Route path="/dashboard-manager" element={<ManagerHome />} />
+          
+          {/* USERS SECTION */}
+          <Route path="/dashboard-manager/users" element={<UserList />} />
+          {/* ⭐ The Route is correct, but requires the import above */}
+          <Route path="/dashboard-manager/users/:id" element={<UserDetails />} />
+          
+          
+          {/* DEPARTMENTS SECTION */}
+          <Route path="/dashboard-manager/departments" element={<DepartmentList />} />
+          <Route path="/dashboard-manager/departments/:id" element={<DepartmentDetails />} />
+          
+          {/* PROJECTS SECTION */}
+          <Route path="/dashboard-manager/projects" element={<ProjectList />} />
+          <Route path="/dashboard-manager/projects/:id" element={<ProjectDetails />} />
+          <Route path="/dashboard-manager/projects/:id/:phase/:subfolder?" element={<FolderView />} />
+
+          {/* User Routes */}
+          <Route path="/dashboard-user" element={<UserHome />} />
+          <Route path="/dashboard-user/projects" element={<ProjectsPlaceholder />} />
+          <Route path="/dashboard-user/profile" element={<h1 className="text-white">👤 My Profile</h1>} />
+        
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;

@@ -11,6 +11,12 @@ const DepartmentSchema = new mongoose.Schema({
     ref: 'User', 
     required: true 
   },
+  key: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    uppercase: true 
+  },
   employees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 }, { timestamps: true });
 

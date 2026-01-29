@@ -105,7 +105,7 @@ exports.uploadFile = async (req, res) => {
       project: projectId,
       user: req.user.id,
       action: 'UPLOAD',
-      details: `Uploaded ${file.originalname} to ${folderPath}`,
+      details: `Uploaded ${file.originalname}`,
       meta: {
         fileName: fileName,
         folderPath: folderPath, // Logical path
