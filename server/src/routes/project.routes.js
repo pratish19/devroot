@@ -1,64 +1,56 @@
 const express = require('express');
 const router = express.Router();
 
-// Middleware
+// Middleware Imports
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
+// ✅ Import the middleware from the file above
+const { uploadMiddleware } = require('../controllers/upload.controller'); 
 
-// Controllers
+// Controller Imports
 const { 
   createProject, 
   getAllProjects, 
-  getProjectById, // 👈 ADDED (Was missing)
+  getProjectById, 
   getSecureUrl,
   deleteFile, 
   updatePhase, 
   uploadThumbnail, 
   updateProjectDetails, 
   deleteProject,
-  getDashboardStats
+  getDashboardStats,
+  uploadProjectFile 
 } = require('../controllers/project.controller');
 
 const { getProjectActivity } = require('../controllers/activity.controller');
-const { uploadMiddleware } = require('../controllers/upload.controller'); 
 
-// ==========================================
-// 1. STATIC & SPECIFIC ROUTES (Priority High)
-// ==========================================
+// --- ROUTES ---
 
-// 📊 Dashboard Stats (MUST be before /:id)
+// Dashboard Stats
 router.get('/stats/dashboard', protect, getDashboardStats);
 
-// 📂 Files & Utils
+// Files & Utils
 router.get('/files/url', protect, getSecureUrl);
 router.delete('/files/:activityId', protect, authorize('MANAGER'), deleteFile);
 
-// 🔄 Phase Updates
+// Phase Updates
 router.patch('/phase', protect, updatePhase);
 
-// ==========================================
-// 2. ROOT ROUTES (The Main List)
-// ==========================================
+// Root Routes
 router.route('/')
   .get(protect, getAllProjects)
   .post(protect, authorize('MANAGER'), createProject);
 
-// ==========================================
-// 3. DYNAMIC ROUTES (/:id) - Priority Low
-// ==========================================
-// ⚠️ These must come LAST because they capture everything else as an ID
+// ✅ UPLOAD ROUTE (Must be before the /:id route)
+router.post('/:id/files', protect, uploadMiddleware, uploadProjectFile);
 
+// Dynamic ID Routes
 router.route('/:id')
   .get(protect, getProjectById)
   .delete(protect, authorize('MANAGER'), deleteProject);
 
-// Project Specific Details
 router.put('/:id/details', protect, authorize('MANAGER'), updateProjectDetails);
-
-// Thumbnail Upload
 router.post('/:id/thumbnail', protect, authorize('MANAGER'), uploadMiddleware, uploadThumbnail);
-
-// Activity Log
 router.get('/:id/activity', protect, getProjectActivity);
 
 module.exports = router;

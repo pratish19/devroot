@@ -34,8 +34,9 @@ const SelectField = ({ label, value, onChange, options }) => (
 const CreateProjectModal = ({ isOpen, onClose, onProjectCreated }) => {
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState([]);
+  const [users, setUsers] = useState([]); // Store all users
 
-  // Complex State Structure to match the design
+  // Complex State Structure
   const [formData, setFormData] = useState({
     name: 'Motional EMF',
     projectType: 'Simulation 2D',
@@ -43,42 +44,54 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated }) => {
     grade: 'XI',
     jiraId: '',
     gradeGroup: '9-11',
-    department: '', // Hidden but needed for backend
+    department: '', 
+    // We store the selected User IDs here temporarily for the form
+    assignedScriptWriter: '',
+    assignedDesigner: '',
+    assignedDeveloper: '',
+    // Phase details for extra info like JIRA IDs
     phaseDetails: {
-    scripts: { assignedTo: '', jiraId: '' },
-    design: { assignedTo: '', jiraId: '' },
-    development: { assignedTo: '', jiraId: '' }
+      scripts: { jiraId: '' },
+      design: { jiraId: '' },
+      development: { jiraId: '' }
     }
   });
 
-  // Fetch departments silently to satisfy backend requirement
+  // Fetch data on mount
   useEffect(() => {
     if (isOpen) {
+      // 1. Fetch Departments
       api.get('/departments').then(res => {
         setDepartments(res.data);
         if (res.data.length > 0) {
           setFormData(prev => ({ ...prev, department: res.data[0]._id }));
         }
       }).catch(err => console.error("Failed to fetch deps", err));
+
+      // 2. Fetch Users (for Dropdowns)
+      api.get('/users').then(res => {
+        setUsers(res.data);
+      }).catch(err => console.error("Failed to fetch users", err));
     }
   }, [isOpen]);
 
+  // Filter Users by Role
+  const designers = users.filter(u => u.role === 'DESIGNER');
+  const developers = users.filter(u => u.role === 'DEVELOPER');
+  // Assuming Managers or specific role handle scripts, adjust 'MANAGER' if needed
+  const scriptWriters = users.filter(u => u.role === 'MANAGER' || u.role === 'SCRIPT_WRITER'); 
 
-  // Handlers for simple fields
+  // Handlers
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Handler for nested phase fields (e.g., scripts.assignedTo)
-  const handlePhaseChange = (phase, field, value) => {
+  const handlePhaseJiraChange = (phase, value) => {
     setFormData(prev => ({
       ...prev,
       phaseDetails: {
         ...prev.phaseDetails,
-        [phase]: {
-          ...prev.phaseDetails[phase],
-          [field]: value
-        }
+        [phase]: { ...prev.phaseDetails[phase], jiraId: value }
       }
     }));
   };
@@ -87,7 +100,34 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post('/projects', formData);
+      // Construct Payload to match Backend Schema
+      // We map the selected single user ID into the arrays required by the backend
+      const payload = {
+        ...formData,
+        assignedUsers: {
+          designers: formData.assignedDesigner ? [formData.assignedDesigner] : [],
+          developers: formData.assignedDeveloper ? [formData.assignedDeveloper] : [],
+          // You can map script writers to one of these or a new field if backend supports it
+          // For now, let's assume script writers might just be tracked in phaseDetails or ignored if schema doesn't support
+        },
+        // We also update the 'assignedTo' string in phaseDetails for display consistency if needed
+        phaseDetails: {
+          scripts: { 
+            jiraId: formData.phaseDetails.scripts.jiraId,
+            assignedTo: users.find(u => u._id === formData.assignedScriptWriter)?.name || ''
+          },
+          design: { 
+            jiraId: formData.phaseDetails.design.jiraId,
+            assignedTo: users.find(u => u._id === formData.assignedDesigner)?.name || ''
+          },
+          development: { 
+            jiraId: formData.phaseDetails.development.jiraId,
+            assignedTo: users.find(u => u._id === formData.assignedDeveloper)?.name || ''
+          }
+        }
+      };
+
+      await api.post('/projects', payload);
       onProjectCreated();
       onClose();
     } catch (err) {
@@ -164,15 +204,25 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated }) => {
               <div>
                 <h3 className="text-white font-bold mb-3 border-b border-gray-700 pb-1">Script</h3>
                 <div className="space-y-3 pl-2">
-                  <InputField 
-                    label="Assigned to:" placeholder="Enter Name"
-                    value={formData.phaseDetails.scripts.assignedTo}
-                    onChange={(e) => handlePhaseChange('scripts', 'assignedTo', e.target.value)}
-                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-gray-400 text-sm">Assigned to:</label>
+                    <select 
+                      value={formData.assignedScriptWriter}
+                      onChange={(e) => handleChange('assignedScriptWriter', e.target.value)}
+                      className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-blue-500 outline-none"
+                    >
+                      <option value="">-- Select Script Writer --</option>
+                      {scriptWriters.map(u => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.employeeId || "No ID"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <InputField 
                     label="JIRA ID:" placeholder="JIRA ID"
                     value={formData.phaseDetails.scripts.jiraId}
-                    onChange={(e) => handlePhaseChange('scripts', 'jiraId', e.target.value)}
+                    onChange={(e) => handlePhaseJiraChange('scripts', e.target.value)}
                   />
                 </div>
               </div>
@@ -181,15 +231,25 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated }) => {
                <div>
                 <h3 className="text-white font-bold mb-3 border-b border-gray-700 pb-1">Design</h3>
                 <div className="space-y-3 pl-2">
-                  <InputField 
-                    label="Assigned to:" placeholder="Enter Name"
-                    value={formData.phaseDetails.design.assignedTo}
-                    onChange={(e) => handlePhaseChange('design', 'assignedTo', e.target.value)}
-                  />
+                   <div className="flex flex-col gap-1">
+                    <label className="text-gray-400 text-sm">Assigned to:</label>
+                    <select 
+                      value={formData.assignedDesigner}
+                      onChange={(e) => handleChange('assignedDesigner', e.target.value)}
+                      className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-blue-500 outline-none"
+                    >
+                      <option value="">-- Select Designer --</option>
+                      {designers.map(u => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.employeeId || "No ID"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <InputField 
                     label="JIRA ID:" placeholder="JIRA ID"
                     value={formData.phaseDetails.design.jiraId}
-                    onChange={(e) => handlePhaseChange('design', 'jiraId', e.target.value)}
+                    onChange={(e) => handlePhaseJiraChange('design', e.target.value)}
                   />
                 </div>
               </div>
@@ -198,15 +258,25 @@ const CreateProjectModal = ({ isOpen, onClose, onProjectCreated }) => {
                <div>
                 <h3 className="text-white font-bold mb-3 border-b border-gray-700 pb-1">Development</h3>
                 <div className="space-y-3 pl-2">
-                  <InputField 
-                    label="Assigned to:" placeholder="Enter Name"
-                    value={formData.phaseDetails.development.assignedTo}
-                    onChange={(e) => handlePhaseChange('development', 'assignedTo', e.target.value)}
-                  />
+                   <div className="flex flex-col gap-1">
+                    <label className="text-gray-400 text-sm">Assigned to:</label>
+                    <select 
+                      value={formData.assignedDeveloper}
+                      onChange={(e) => handleChange('assignedDeveloper', e.target.value)}
+                      className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:border-blue-500 outline-none"
+                    >
+                      <option value="">-- Select Developer --</option>
+                      {developers.map(u => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.employeeId || "No ID"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <InputField 
                     label="JIRA ID:" placeholder="JIRA ID"
                     value={formData.phaseDetails.development.jiraId}
-                    onChange={(e) => handlePhaseChange('development', 'jiraId', e.target.value)}
+                    onChange={(e) => handlePhaseJiraChange('development', e.target.value)}
                   />
                 </div>
               </div>

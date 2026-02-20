@@ -3,60 +3,67 @@ const mongoose = require('mongoose');
 const ProjectSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String },
-  department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: false }, // Made optional for now to match UI
   
-  // ⭐ NEW METADATA FIELDS (from design)
-  jiraId: { type: String, default: '' }, // Main Project JIRA
-  projectType: { type: String, default: 'Simulation 2D' }, 
+  // Basic Info
+  projectType: { 
+    type: String, 
+    enum: ['Simulation 2D', 'Simulation 3D', 'Interactive Video'],
+    default: 'Simulation 2D'
+  },
   subject: { type: String, default: 'Physics' },
   grade: { type: String, default: 'XI' },
   gradeGroup: { type: String, default: '9-11' },
-  thumbnailUrl: { type: String, default: '' },
+  jiraId: { type: String }, // Global JIRA ID
 
-  // ⭐ NEW PHASE DETAILS (from design right column)
-  // Stores assignments and specific JIRA IDs per phase
-  phaseDetails: {
-    scripts: {
-        assignedTo: { type: String, default: '' }, 
-        jiraId: { type: String, default: '' },
-        startDate: { type: Date }, // New
-        endDate: { type: Date }    // New
-    },
-    design: {
-        assignedTo: { type: String, default: '' },
-        jiraId: { type: String, default: '' },
-        startDate: { type: Date }, // New
-        endDate: { type: Date }    // New
-    },
-    development: {
-        assignedTo: { type: String, default: '' },
-        jiraId: { type: String, default: '' },
-        startDate: { type: Date }, // New
-        endDate: { type: Date }    // New
-    }
-  },
-  // Keep existing tracking fields
-  assignedUsers: {
-    designers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    developers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    testers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
-  },
-
-  phases: {
-    design: { type: String, enum: ['TO_DO', 'IN_PROGRESS', 'DONE'], default: 'TO_DO' },
-    development: { type: String, enum: ['TO_DO', 'IN_PROGRESS', 'DONE'], default: 'TO_DO' },
-    scripts: { type: String, enum: ['TO_DO', 'IN_PROGRESS', 'DONE'], default: 'TO_DO' },
-    testing: { type: String, enum: ['TO_DO', 'IN_PROGRESS', 'DONE'], default: 'TO_DO' }
-  },
-
+  // Status
   status: { 
     type: String, 
     enum: ['TO_DO', 'IN_PROGRESS', 'DONE'], 
     default: 'TO_DO' 
   },
+  
+  // Department Link
+  department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
+  
+  // ✅ THE CRITICAL FIX: Defined Arrays for Populate
+  assignedUsers: {
+    designers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    developers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    testers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    scriptWriters: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] // This was likely missing!
+  },
 
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  deadline: { type: Date }
+  // ✅ Phase Details (Dates & JIRA)
+  phaseDetails: {
+    scripts: {
+      jiraId: { type: String },
+      startDate: { type: Date },
+      endDate: { type: Date },
+      status: { type: String, default: 'TO_DO' }
+    },
+    design: {
+      jiraId: { type: String },
+      startDate: { type: Date },
+      endDate: { type: Date },
+      status: { type: String, default: 'TO_DO' }
+    },
+    development: {
+      jiraId: { type: String },
+      startDate: { type: Date },
+      endDate: { type: Date },
+      status: { type: String, default: 'TO_DO' }
+    }
+  },
+
+  // Legacy Phases Support (Keep this for backward compatibility if needed)
+  phases: {
+    scripts: { type: String, default: 'TO_DO' },
+    design: { type: String, default: 'TO_DO' },
+    development: { type: String, default: 'TO_DO' },
+    testing: { type: String, default: 'TO_DO' }
+  },
+
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Project', ProjectSchema);

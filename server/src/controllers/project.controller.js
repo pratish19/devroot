@@ -1,6 +1,6 @@
 const Project = require('../models/Project');
 const Activity = require('../models/Activity');
-const User = require('../models/User'); // Ensure User is imported
+const User = require('../models/User'); 
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase
@@ -59,14 +59,21 @@ exports.createProject = async (req, res) => {
   }
 };
 
+
+
 // ==========================================
-// 2. GET ALL PROJECTS
+// 2. GET ALL PROJECTS (Updated)
 // ==========================================
 exports.getAllProjects = async (req, res) => {
   try {
     const projects = await Project.find()
-      .populate('department', 'name') 
+      .populate('department', 'name')
+      // ⭐ FIX: Populate assigned users so we can see who is inside!
+      .populate('assignedUsers.designers', 'name email _id')
+      .populate('assignedUsers.developers', 'name email _id')
+      .populate('assignedUsers.testers', 'name email _id')
       .sort({ createdAt: -1 });
+
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -78,19 +85,19 @@ exports.getAllProjects = async (req, res) => {
 // ==========================================
 exports.getProjectById = async (req, res) => {
   try {
-    // Matches router.get('/:id')
     const project = await Project.findById(req.params.id)
       .populate('department', 'name')
-      .populate('assignedUsers.designers', 'name email')
-      .populate('assignedUsers.developers', 'name email')
-      .populate('assignedUsers.testers', 'name email');
+      // ✅ POPULATE ALL ASSIGNED USERS
+      .populate('assignedUsers.designers', 'name email employeeId')
+      .populate('assignedUsers.developers', 'name email employeeId')
+      .populate('assignedUsers.testers', 'name email employeeId')
+      .populate('assignedUsers.scriptWriters', 'name email employeeId'); // Ensure this matches your schema
 
-    if (!project) return res.status(404).json({ message: 'Project not found' });
+    if (!project) return res.status(404).json({ message: "Project not found" });
 
     res.json(project);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server Error' });
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -99,7 +106,6 @@ exports.getProjectById = async (req, res) => {
 // ==========================================
 exports.updateProjectDetails = async (req, res) => {
   try {
-    // ⭐ FIXED: Matches router.put('/:id/details')
     const { id } = req.params; 
     const updates = req.body;
 
@@ -113,7 +119,6 @@ exports.updateProjectDetails = async (req, res) => {
 
     if (!project) return res.status(404).json({ message: "Project not found" });
 
-    // Log Activity
     await Activity.create({
       project: id,
       user: req.user.id,
@@ -134,9 +139,7 @@ exports.updateProjectDetails = async (req, res) => {
 // ==========================================
 exports.updatePhase = async (req, res) => {
   try {
-    // Note: This uses req.body, so it stays as projectId
     const { projectId, phase, status } = req.body;
-    
     if (!req.user) return res.status(401).json({ message: "Unauthorized" });
     const userRole = req.user.role;
 
@@ -146,10 +149,11 @@ exports.updatePhase = async (req, res) => {
     if (!allowedPhases.includes(phase)) return res.status(400).json({ message: "Invalid phase" });
     if (!allowedStatuses.includes(status)) return res.status(400).json({ message: "Invalid status" });
 
-    // Permissions logic...
     let isAuthorized = (userRole === 'MANAGER') || 
                        (userRole === 'DESIGNER' && phase === 'design') || 
-                       (userRole === 'DEVELOPER' && phase === 'development');
+                       (userRole === 'DEVELOPER' && phase === 'development') ||
+                       // Also allow if user is specifically assigned to this phase (handled in frontend logic mostly, but good to check here if you implemented assignedUsers check)
+                       (userRole === 'SCRIPT_WRITER' && phase === 'scripts');
 
     if (!isAuthorized) return res.status(403).json({ message: "Access Denied" });
 
@@ -158,8 +162,7 @@ exports.updatePhase = async (req, res) => {
 
     project.phases[phase] = status;
 
-    // Auto-Calculate Global Status
-    const currentPhases = { ...project.phases, [phase]: status }; // Safe merge
+    const currentPhases = { ...project.phases, [phase]: status };
     const relevantStatuses = [currentPhases.design, currentPhases.development, currentPhases.scripts];
     
     const allDone = relevantStatuses.every(s => s === 'DONE');
@@ -181,13 +184,9 @@ exports.updatePhase = async (req, res) => {
 // ==========================================
 exports.deleteProject = async (req, res) => {
   try {
-    // ⭐ FIXED: Matches router.delete('/:id')
     const { id } = req.params;
-    
     const project = await Project.findByIdAndDelete(id);
-    
     if (!project) return res.status(404).json({ message: "Project not found" });
-
     res.json({ message: "Project deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -197,6 +196,47 @@ exports.deleteProject = async (req, res) => {
 // ==========================================
 // 7. FILE & ASSET MANAGEMENT
 // ==========================================
+
+exports.uploadProjectFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { folder } = req.body; 
+    const file = req.file;
+
+    if (!file) return res.status(400).json({ message: "No file uploaded" });
+
+    // Sanitize filename
+    const cleanFileName = file.originalname.replace(/\s+/g, '_');
+    const cloudPath = `projects/${id}/${folder}/${Date.now()}-${cleanFileName}`;
+    
+    // Upload to Supabase
+    const { error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(cloudPath, file.buffer, { contentType: file.mimetype });
+
+    if (error) throw error;
+
+    // Save to MongoDB
+    const newActivity = await Activity.create({
+      project: id,
+      user: req.user.id,
+      action: 'UPLOAD_FILE', 
+      details: `Uploaded ${cleanFileName} to ${folder}`,
+      meta: { 
+        fileName: cleanFileName,
+        fileSize: file.size,
+        folder: folder, 
+        cloudPath: cloudPath
+      }
+    });
+
+    await newActivity.populate('user', 'name email');
+    res.status(201).json(newActivity);
+  } catch (err) {
+    console.error("Upload Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
 
 exports.getSecureUrl = async (req, res) => {
   try {
@@ -219,18 +259,39 @@ exports.getSecureUrl = async (req, res) => {
   }
 };
 
+// ✅ UPDATED DELETE FILE FUNCTION (With Permission Check)
 exports.deleteFile = async (req, res) => {
   try {
-    const { activityId } = req.params;
+    const { activityId } = req.params; // This is the Activity ID (File Record)
+    
+    // 1. Find the file record
     const log = await Activity.findById(activityId);
     if (!log) return res.status(404).json({ message: "File record not found" });
 
+    // 🔐 2. PERMISSION CHECK
+    const isManager = req.user.role === 'MANAGER';
+    
+    // Check if the logged-in user is the one who uploaded it
+    const isUploader = log.user.toString() === req.user.id;
+
+    // Reject if neither Manager nor Uploader
+    if (!isManager && !isUploader) {
+      return res.status(403).json({ 
+        message: "Permission Denied: You can only delete files you uploaded." 
+      });
+    }
+
+    // 3. Delete from Supabase
     if (log.meta && log.meta.cloudPath) {
       await supabase.storage.from(BUCKET_NAME).remove([log.meta.cloudPath]);
     }
+    
+    // 4. Delete from Database
     await Activity.findByIdAndDelete(activityId);
+    
     res.json({ message: "File deleted successfully" });
   } catch (err) {
+    console.error("Delete Error:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -240,7 +301,6 @@ exports.deleteFile = async (req, res) => {
 // ==========================================
 exports.uploadThumbnail = async (req, res) => {
   try {
-    // ⭐ FIXED: Matches router.post('/:id/thumbnail')
     const { id } = req.params;
     const file = req.file;
     if (!file) return res.status(400).json({ message: "No image file uploaded" });
@@ -269,81 +329,33 @@ exports.uploadThumbnail = async (req, res) => {
 // ==========================================
 // 9. DASHBOARD STATS
 // ==========================================
-// @desc    Get Dashboard Stats (Smart Phase-Based Overdue)
-// @route   GET /api/projects/stats/dashboard
-// @access  Private (Manager)
 exports.getDashboardStats = async (req, res) => {
   try {
     const today = new Date();
-
-    // 🧠 SMART OVERDUE LOGIC
-    // A project is overdue if:
-    // 1. The MAIN deadline passed AND it's not done.
-    // 2. OR... The SCRIPT deadline passed AND script is not done.
-    // 3. OR... The DESIGN deadline passed AND design is not done.
-    // 4. OR... The DEV deadline passed AND dev is not done.
-    
     const overdueQuery = {
       $or: [
-        // A. Global Project Deadline
-        { 
-          deadline: { $lt: today }, 
-          status: { $ne: 'DONE' } 
-        },
-        
-        // B. Script Phase Overdue
-        { 
-          'phaseDetails.scripts.endDate': { $lt: today }, 
-          'phases.scripts': { $ne: 'DONE' } 
-        },
-
-        // C. Design Phase Overdue
-        { 
-          'phaseDetails.design.endDate': { $lt: today }, 
-          'phases.design': { $ne: 'DONE' } 
-        },
-
-        // D. Development Phase Overdue
-        { 
-          'phaseDetails.development.endDate': { $lt: today }, 
-          'phases.development': { $ne: 'DONE' } 
-        }
+        { deadline: { $lt: today }, status: { $ne: 'DONE' } },
+        { 'phaseDetails.scripts.endDate': { $lt: today }, 'phases.scripts': { $ne: 'DONE' } },
+        { 'phaseDetails.design.endDate': { $lt: today }, 'phases.design': { $ne: 'DONE' } },
+        { 'phaseDetails.development.endDate': { $lt: today }, 'phases.development': { $ne: 'DONE' } }
       ]
     };
 
-    // Run all counts in parallel
-    const [
-      totalProjects,
-      doneProjects,
-      inProgressProjects,
-      todoProjects,
-      overdueProjects, // Now uses the smart query
-      totalUsers,
-      recentProjects
-    ] = await Promise.all([
+    const [total, done, inProgress, todo, overdue, users, recent] = await Promise.all([
       Project.countDocuments(),
       Project.countDocuments({ status: 'DONE' }),
       Project.countDocuments({ status: 'IN_PROGRESS' }),
       Project.countDocuments({ status: 'TO_DO' }),
-      Project.countDocuments(overdueQuery), // 👈 APPLYING NEW LOGIC HERE
+      Project.countDocuments(overdueQuery),
       User.countDocuments({ role: { $ne: 'ADMIN' } }),
       Project.find().sort({ updatedAt: -1 }).limit(5).select('name status updatedAt')
     ]);
 
     res.json({
-      counts: {
-        total: totalProjects,
-        done: doneProjects,
-        inProgress: inProgressProjects,
-        todo: todoProjects,
-        overdue: overdueProjects,
-        people: totalUsers
-      },
-      recentActivity: recentProjects
+      counts: { total, done, inProgress, todo, overdue, people: users },
+      recentActivity: recent
     });
-
   } catch (err) {
-    console.error("Dashboard Stats Error:", err);
     res.status(500).json({ error: err.message });
   }
 };

@@ -7,7 +7,7 @@ require('dotenv').config();
 const authRoutes = require('./src/routes/auth.routes');
 const departmentRoutes = require('./src/routes/department.routes');
 const projectRoutes = require('./src/routes/project.routes');
-const uploadRoutes = require('./src/routes/upload.routes');
+//const uploadRoutes = require('./src/routes/upload.routes');
 const userRoutes = require('./src/routes/user.routes'); // 👈 Import Users
 
 // 1. Initialize the App
@@ -33,7 +33,7 @@ app.use(express.json()); // Essential for sending JSON
 app.use('/api/auth', authRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/projects', projectRoutes);
-app.use('/api/uploads', uploadRoutes);
+//app.use('/api/uploads', uploadRoutes);
 app.use('/api/users', userRoutes); // 👈 Add Users Route Here
 
 // 5. Server Start

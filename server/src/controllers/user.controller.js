@@ -6,11 +6,8 @@ const Project = require('../models/Project'); // 👈 Import Project Model
 // @access  Private (Manager)
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find()
-      .select('-password')
-      .populate('department', 'name key')
-      .sort({ createdAt: -1 });
-
+    // ✅ ADD 'employeeId' to the select list
+    const users = await User.find().select('name email role employeeId');
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -92,32 +89,37 @@ exports.deleteUser = async (req, res) => {
 // @desc    Get Single User with Phase-Based Project Stats
 // @route   GET /api/users/:id
 // @access  Private (Manager)
+// @desc    Get Single User with Phase-Based Project Stats
+// @route   GET /api/users/:id
+// @access  Private (Manager OR the User themselves)
 exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // 🛡️ SAFETY NET & SECURITY CHECK
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authorized. Please log in." });
+    }
+    if (req.user.role !== 'MANAGER' && req.user.id !== id) {
+      return res.status(403).json({ message: "Access denied. You can only view your own profile." });
+    }
+
     // 1. Fetch User
-    const user = await User.findById(id).select('-password').populate('department');
+    const user = await User.findById(id).select('-password').populate('department','name');
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
     // 2. ⭐ SMART QUERY: Check both Assigned Arrays AND Phase Metadata
-    // We check if the User ID is in the arrays OR if their ID/Name is in the 'assignedTo' strings
     const projects = await Project.find({
       $or: [
-        // A. Standard Arrays (The most reliable check)
         { 'assignedUsers.designers': id },
         { 'assignedUsers.developers': id },
         { 'assignedUsers.testers': id },
-
-        // B. Phase Specific Strings (For Script, Design, Dev leads)
         { 'phaseDetails.scripts.assignedTo': id }, 
         { 'phaseDetails.design.assignedTo': id },
         { 'phaseDetails.development.assignedTo': id },
-        
-        // C. Fallback: Check against User Name (in case you store "Alice" instead of ID)
         { 'phaseDetails.scripts.assignedTo': user.name },
         { 'phaseDetails.design.assignedTo': user.name },
         { 'phaseDetails.development.assignedTo': user.name }
@@ -132,6 +134,7 @@ exports.getUserById = async (req, res) => {
       todo: projects.filter(p => p.status === 'TO_DO').length
     };
 
+    // Return the combined object
     res.json({ user, projects, stats });
 
   } catch (err) {

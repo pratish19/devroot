@@ -1,23 +1,30 @@
 const mongoose = require('mongoose');
 
 const ActivitySchema = new mongoose.Schema({
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  action: { 
-    type: String, 
-    //enum: ['UPLOAD', 'STATUS_CHANGE', 'PROJECT_CREATED']
-    enum: ['UPLOAD', 'DELETE', 'CREATE', 'UPDATE', 'STATUS_CHANGE'], 
-    required: true 
+  project: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    required: true
   },
-  details: { type: String, required: true }, // e.g., "Uploaded logo.png to designs"
-// ⭐ UPDATE THIS SECTION ⭐
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  action: {
+    type: String,
+    required: true,
+    // ✅ FIX: Added 'UPLOAD_FILE' so uploads don't crash
+    enum: ['CREATE', 'UPDATE', 'DELETE', 'UPLOAD_FILE', 'COMMENT'] 
+  },
+  details: {
+    type: String,
+    required: true
+  },
+  // ✅ FIX: Mixed type allows saving 'folder', 'fileName', etc. without validation errors
   meta: {
-    fileName: String,
-    folderPath: String,
-    phase: String,
-    cloudPath: String, // 👈 Explicitly add this!
-    // Or make it flexible for future changes:
-    // anyOtherField: mongoose.Schema.Types.Mixed 
+    type: mongoose.Schema.Types.Mixed, 
+    default: {}
   }
 }, { timestamps: true });
 

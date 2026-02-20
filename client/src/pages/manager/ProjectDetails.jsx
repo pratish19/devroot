@@ -25,9 +25,8 @@ const ProjectDetails = () => {
 
   const fetchProjectData = async () => {
     try {
-      const res = await api.get('/projects');
-      const found = res.data.find(p => p._id === id);
-      setProject(found);
+      const res = await api.get(`/projects/${id}`); // Ensure we fetch specific ID to get populated data
+      setProject(res.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -82,6 +81,22 @@ const ProjectDetails = () => {
     return new Date(dateString).toLocaleDateString('en-GB'); // DD/MM/YYYY format
   };
 
+  // ⭐ HELPER TO GET ASSIGNED NAME FROM ARRAYS
+  const getAssignedUser = (phaseKey) => {
+    if (!project.assignedUsers) return 'Unassigned';
+    
+    let users = [];
+    if (phaseKey === 'scripts') users = project.assignedUsers.scriptWriters;
+    else if (phaseKey === 'design') users = project.assignedUsers.designers;
+    else if (phaseKey === 'development') users = project.assignedUsers.developers;
+
+    // Check if we have a user and return name
+    if (users && users.length > 0) {
+      return users[0].name || users[0].email || 'Unassigned';
+    }
+    return 'Unassigned';
+  };
+
   if (loading || !project) return <div className="bg-black h-screen text-white p-10 flex items-center justify-center">Loading Mission Control...</div>;
 
   return (
@@ -115,7 +130,7 @@ const ProjectDetails = () => {
                     project.status === 'TO_DO' ? 'bg-gray-700 text-gray-300' :
                     'bg-blue-600 text-white'
                   }`}>
-                    {project.status.replace('_', ' ')}
+                    {project.status?.replace('_', ' ')}
                   </span>
                   
                   {/* ⭐ CLICKING THIS NOW OPENS THE EDIT MODAL */}
@@ -138,10 +153,10 @@ const ProjectDetails = () => {
                   <div className="text-gray-200 font-medium text-lg">{project.gradeGroup || 'N/A'}</div>
                 </div>
                 <div className="md:col-span-3">
-                   <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-2">Description</label>
-                   <p className="text-gray-400 text-sm leading-relaxed max-w-4xl">
-                     {project.description || "No description provided for this mission."}
-                   </p>
+                    <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-2">Description</label>
+                    <p className="text-gray-400 text-sm leading-relaxed max-w-4xl">
+                      {project.description || "No description provided for this mission."}
+                    </p>
                 </div>
               </div>
             </div>
@@ -152,6 +167,8 @@ const ProjectDetails = () => {
             {['scripts', 'design', 'development'].map((phaseKey) => {
               // 1. Safely extract details for this specific phase
               const details = project.phaseDetails?.[phaseKey] || {};
+              // 2. Get the assigned Name from the populated Arrays
+              const assignedName = getAssignedUser(phaseKey);
 
               return (
                 <div 
@@ -197,24 +214,24 @@ const ProjectDetails = () => {
                   </div>
                   
                   <div className="space-y-4">
-                     <div className="flex justify-between items-center text-sm">
+                      <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500">Assigned</span>
-                        <span className="text-gray-300 font-medium">
-                          {details.assignedTo || 'Unassigned'}
+                        <span className={`font-medium ${assignedName === 'Unassigned' ? 'text-gray-600 italic' : 'text-gray-300'}`}>
+                          {assignedName}
                         </span>
-                     </div>
-                     <div className="flex justify-between items-center text-sm">
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500">JIRA ID</span>
                         <span className="text-blue-500/80 font-mono">
                           {details.jiraId || '---'}
                         </span>
-                     </div>
-                     
-                     {/* ⭐ FIXED DYNAMIC DATES HERE */}
-                     <div className="flex justify-between text-[11px] text-gray-600 mt-4 border-t border-gray-800 pt-4">
-                       <span>Start: {formatDate(details.startDate)}</span>
-                       <span>End: {formatDate(details.endDate)}</span>
-                     </div>
+                      </div>
+                      
+                      {/* ⭐ FIXED DYNAMIC DATES HERE */}
+                      <div className="flex justify-between text-[11px] text-gray-600 mt-4 border-t border-gray-800 pt-4">
+                        <span>Start: {formatDate(details.startDate)}</span>
+                        <span>End: {formatDate(details.endDate)}</span>
+                      </div>
                   </div>
                 </div>
               );

@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
-import { FaFileImage, FaFileCode, FaTrash, FaDownload, FaEye } from 'react-icons/fa';
+import { FaFileImage, FaFileCode, FaTrash, FaDownload } from 'react-icons/fa';
 import api from '../utils/api';
 
 const FileCard = ({ file, onDelete }) => {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
 
-  const isImage = file.meta?.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+  // Safety check for meta
+  const meta = file.meta || {};
+  const isImage = meta.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 
   useEffect(() => {
-    // 1. Get PREVIEW Link (For viewing)
     const fetchPreview = async () => {
-      if (file.meta?.cloudPath) {
+      if (meta.cloudPath && isImage) {
         try {
-          const res = await api.get(`/projects/files/url?path=${encodeURIComponent(file.meta.cloudPath)}`);
+          const res = await api.get(`/projects/files/url?path=${encodeURIComponent(meta.cloudPath)}`);
           setPreviewUrl(res.data.url);
         } catch (err) {
           console.error("Failed to load preview", err);
@@ -23,50 +24,65 @@ const FileCard = ({ file, onDelete }) => {
     fetchPreview();
   }, [file]);
 
-  /// ⭐ UPDATED: Handle Force Download with Filename
- // ... inside FileCard.jsx
+  // 🧠 SMART NAME RESCUE
+  // This logic finds the name even if 'meta' is empty (fixing "Unknown File")
+  const getDisplayName = () => {
+    let name = "Unknown File";
+
+    // 1. Try the Metadata (Best source)
+    if (meta.fileName) {
+      name = meta.fileName;
+    } 
+    // 2. Fallback: Extract from 'details' (e.g. "Uploaded image.png to ...")
+    else if (file.details?.startsWith("Uploaded ")) {
+      // Logic: Take the text between "Uploaded " and " to"
+      const parts = file.details.split(' to ');
+      name = parts[0].replace("Uploaded ", "");
+    }
+
+    // 3. Clean up the Timestamp (e.g. "17123456-myImage.png" -> "myImage.png")
+    // This regex looks for "numbers-text" at the start
+    if (/^\d+-/.test(name)) {
+      return name.replace(/^\d+-/, '');
+    }
+    
+    return name;
+  };
+
+  const displayName = getDisplayName();
 
   const handleDownload = async (e) => {
     e.stopPropagation();
 
-    // 🛑 SAFETY CHECK: Ensure we actually have a path to download
-    const cloudPath = file.meta?.cloudPath;
-    if (!cloudPath) {
-      console.error("❌ Corrupted File Record:", file);
-      alert("Cannot download: This file record is missing its cloud path (it might be an old test file).");
+    // If cloudPath is missing (old files), we can't download
+    if (!meta.cloudPath) {
+      alert("Cannot download: This is an old file record missing cloud data.");
       return;
     }
 
     try {
-      // 1. Get clean filename
-      const originalName = file.meta?.fileName?.split('-').slice(1).join('-') || file.meta.fileName;
-
-      // 2. Request link
       const res = await api.get(`/projects/files/url`, {
         params: {
-          path: cloudPath, // Use the variable we checked above
+          path: meta.cloudPath,
           download: 'true',
-          filename: originalName 
+          filename: displayName // Use the clean name for download
         }
       });
       
-      // 3. Trigger Download
       const link = document.createElement('a');
       link.href = res.data.url;
-      link.setAttribute('download', originalName);
+      link.setAttribute('download', displayName);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
     } catch (err) {
-      console.error("Download Error Details:", err.response?.data || err.message);
-      alert("Download failed. Check console for details.");
+      alert("Download failed. Check console.");
     }
   };
 
   const handleDelete = async (e) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${file.meta?.fileName}"?`)) {
+    if (window.confirm(`Delete "${displayName}"?`)) {
       onDelete(file._id);
     }
   };
@@ -83,29 +99,29 @@ const FileCard = ({ file, onDelete }) => {
         {isImage && previewUrl ? (
           <img 
             src={previewUrl} 
-            alt="preview" 
+            alt={displayName} 
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
           />
         ) : (
-          <div className="text-gray-600 group-hover:text-blue-400 transition-colors">
+          <div className="text-gray-600 group-hover:text-blue-400 transition-colors flex flex-col items-center gap-2">
             {isImage ? <FaFileImage className="text-4xl" /> : <FaFileCode className="text-4xl" />}
+            {/* Show extension for non-images */}
+            <span className="text-xs font-mono uppercase bg-gray-800 px-1 rounded">
+              {displayName.split('.').pop()}
+            </span>
           </div>
         )}
 
         {/* OVERLAY ACTIONS */}
         {isHovered && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center gap-3 animate-fadeIn backdrop-blur-sm">
-            
-            {/* Download Button */}
             <button 
-              onClick={handleDownload} // 👈 Uses new logic
+              onClick={handleDownload}
               title="Download"
               className="p-2.5 bg-gray-700 rounded-full text-white hover:bg-blue-600 hover:scale-110 transition-all shadow-lg"
             >
               <FaDownload size={12} />
             </button>
-            
-            {/* Delete Button */}
             <button 
               onClick={handleDelete}
               title="Delete"
@@ -117,10 +133,10 @@ const FileCard = ({ file, onDelete }) => {
         )}
       </div>
 
-      {/* INFO AREA */}
+      {/* INFO AREA - Shows "As Is" Title */}
       <div className="p-3 bg-gray-900 border-t border-gray-800">
-        <p className="text-xs text-gray-200 font-medium truncate">
-          {file.meta?.fileName?.split('-').slice(1).join('-') || "Unknown File"}
+        <p className="text-xs text-gray-200 font-medium truncate" title={displayName}>
+          {displayName}
         </p>
       </div>
     </div>
