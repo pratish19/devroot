@@ -15,13 +15,11 @@ const FolderView = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
-  // 👤 Get Current User info
   const currentUser = JSON.parse(localStorage.getItem('user'));
   const currentUserId = currentUser?.id || currentUser?._id;
   const isManager = currentUser?.role === 'MANAGER';
   const isUserRoute = location.pathname.includes('/dashboard-user');
 
-  // 🛠️ MAPPING: Maps singular URL to plural Folder
   const getCorrectPath = () => {
     let root = phase;
     if (phase === 'design') root = 'designs';
@@ -37,18 +35,21 @@ const FolderView = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Project
       const projRes = await api.get(`/projects/${id}`);
       setProject(projRes.data);
 
-      // 2. Fetch Files (Activity Log)
       const actRes = await api.get(`/projects/${id}/activity`);
       
       const filteredFiles = actRes.data.filter(log => {
         if (log.action !== 'UPLOAD_FILE') return false;
-        if (!log.meta || !log.meta.folder) return false;
-        const dbFolder = log.meta.folder.toLowerCase();
-        return dbFolder === currentPath.toLowerCase();
+        
+        // 🛠️ THE FIX: Smart Path Normalization
+        const normalize = (path) => path?.toLowerCase().replace(/\/+$/, "").replace(/^designs/, "design");
+        
+        const dbFolder = normalize(log.meta?.folder || "");
+        const targetFolder = normalize(currentPath || "");
+
+        return dbFolder === targetFolder;
       });
 
       setFiles(filteredFiles);
@@ -59,74 +60,55 @@ const FolderView = () => {
     }
   };
 
-  // 🔐 PERMISSION LOGIC (The Fix)
   const checkPermission = () => {
     if (!project) return false;
-
-    // 1. Managers: Always have access
     if (isManager) return true;
 
-    // 2. Users: Check explicit assignment
     let assignedUsers = [];
-    
-    // Select the correct list based on phase
     if (phase === 'scripts') assignedUsers = project.assignedUsers?.scriptWriters || [];
     else if (phase === 'design') assignedUsers = project.assignedUsers?.designers || [];
     else if (phase === 'development') assignedUsers = project.assignedUsers?.developers || [];
 
-    // ⭐ FIX: Force String comparison to handle ObjectId vs String issues
     const myIdStr = String(currentUserId);
-    
-    return assignedUsers.some(u => {
-      const assignedIdStr = String(u._id || u); // Handle populated object OR raw ID
-      return assignedIdStr === myIdStr;
-    });
+    return assignedUsers.some(u => String(u._id || u) === myIdStr);
   };
 
-  // Calculate permission once
   const canEdit = checkPermission();
 
   const handleUpload = async (e) => {
     if (!canEdit) return; 
-
     const file = e.target.files[0];
     if (!file) return;
 
     setUploading(true);
     const formData = new FormData();
-    formData.append('file', file);
+    
+    // 🚨 THE FIX: Text fields MUST be appended before the file for Multer
     formData.append('folder', currentPath); 
+    formData.append('file', file); 
 
     try {
-      await api.post(`/projects/${id}/files`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      // 🚨 THE FIX: Do NOT set manual headers here. Axios handles it automatically.
+      await api.post(`/projects/${id}/files`, formData);
       fetchData(); 
     } catch (err) {
       console.error("Upload Error:", err);
-      alert(err.response?.data?.error || "Upload failed");
+      alert(err.response?.data?.error || err.response?.data?.message || "Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
   const handleDeleteFile = async (activityId) => {
-    // Double check permission
-    if (!canEdit) {
-      alert("You do not have permission to delete files in this phase.");
-      return;
-    }
-
     if (!window.confirm("Delete this file permanently?")) return;
     try {
       await api.delete(`/projects/files/${activityId}`);
       setFiles(prev => prev.filter(f => f._id !== activityId));
     } catch (err) {
-      alert("Failed to delete file");
+      alert("Failed to delete file. You might not have permission.");
     }
   };
 
-  // 🧭 DYNAMIC NAVIGATION
   const getPrefix = () => isUserRoute ? '/dashboard-user' : '/dashboard-manager';
 
   const handleFolderSelect = (newPhase, newSubfolder = null) => {
@@ -141,7 +123,6 @@ const FolderView = () => {
 
   return (
     <div className="flex h-screen bg-black text-gray-100 overflow-hidden font-sans">
-      
       <ProjectSidebar 
         projectId={id} 
         activePhase={phase} 
@@ -166,14 +147,12 @@ const FolderView = () => {
           </div>
 
           <div className="relative flex items-center gap-3">
-            {/* 🔒 READ ONLY BADGE */}
             {!canEdit && (
               <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded text-xs text-gray-400 font-bold uppercase">
                  <FaLock size={10} /> Read Only
               </div>
             )}
 
-            {/* 📤 UPLOAD BUTTON (Only if Can Edit) */}
             {canEdit && (
               <>
                 <input type="file" id="fileUpload" className="hidden" onChange={handleUpload} disabled={uploading} />
@@ -209,7 +188,6 @@ const FolderView = () => {
                 <FileCard 
                   key={file._id} 
                   file={file} 
-                  // ✅ PASS DELETE HANDLER ONLY IF CAN EDIT
                   onDelete={canEdit ? handleDeleteFile : null} 
                 />
               ))}
