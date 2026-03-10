@@ -18,6 +18,7 @@
 
 ## 📋 Overview
 **Deployed Link** : https://devroot-omega.vercel.app/
+**Vibe Coded AI integration** : https://dev-root-manager-661978.withmattr.app
 **DevRoot** is a full-stack, role-based management system designed specifically to streamline workflows for creative and development departments. By organizing projects into strict phases (Scripts, Design, Development, and Testing), DevRoot ensures that team members only interact with the assets and timelines relevant to their specific assignments.
 
 ---
